@@ -1,0 +1,27 @@
+[tool.poetry]
+name = "atap-corpus-timeline"
+version = "0.1.0"
+description = "A tool for visualising features of a corpus over time"
+authors = ["Hamish Croser <hamish.croser@sydney.edu.au>"]
+readme = "README.md"
+documentation = "https://australian-text-analytics-platform.github.io/atap-corpus-timeline/DOCS.html"
+repository = "https://github.com/Australian-Text-Analytics-Platform/atap-corpus-timeline"
+license = "MIT"
+packages = [{include = "atap_corpus_timeline"}]
+exclude = ["*/.ipynb_checkpoints/*", "*log.txt"]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.13"
+atap-corpus-loader = "~=1.7.6"
+panel = "~=1.4"
+
+[tool.poetry.group.dev]
+optional = true
+
+[tool.poetry.group.dev.dependencies]
+jupyterlab = "~=4.0.0"
+ipywidgets = "~=8.1.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
