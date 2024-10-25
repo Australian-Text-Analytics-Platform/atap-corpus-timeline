@@ -11,9 +11,12 @@ packages = [{include = "atap_corpus_timeline"}]
 exclude = ["*/.ipynb_checkpoints/*", "*log.txt"]
 
 [tool.poetry.dependencies]
-python = ">=3.10,<3.13"
-atap-corpus-loader = "~=1.7.6"
+python = ">=3.10,<3.12"
 panel = "~=1.4"
+plotly = "~5.24.1"
+atap-corpus-loader = "~=1.7.6"
+atap-context-extractor = "~0.2.0"
+atap-corpus-slicer = "~0.3.5"
 
 [tool.poetry.group.dev]
 optional = true
