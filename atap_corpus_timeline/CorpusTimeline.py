@@ -11,7 +11,7 @@ from atap_corpus_slicer import CorpusSlicer
 
 from atap_corpus_timeline.CorpusVisualiser import CorpusVisualiser
 
-pn.extension("plotly")
+pn.extension("plotly", notifications=True)
 
 
 class CorpusTimeline(pn.viewable.Viewer):

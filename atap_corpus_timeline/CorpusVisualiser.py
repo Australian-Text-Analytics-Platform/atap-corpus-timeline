@@ -8,11 +8,10 @@ from atap_corpus.corpus.corpus import DataFrameCorpus
 from atap_corpus_loader import CorpusLoader
 from pandas import DataFrame, Series, Grouper
 from pandas.core.dtypes.common import is_datetime64_any_dtype
-from panel.pane import Plotly
-from panel.widgets import Select, DatetimeRangePicker, Button, IntInput
+from panel.pane import Plotly, Markdown
+from panel.widgets import Select, DatetimeRangePicker, Button, IntInput, Checkbox
 import plotly.express as px
-
-pn.extension("plotly")
+from plotly.graph_objs import Figure
 
 
 class CorpusVisualiser(pn.viewable.Viewer):
@@ -22,8 +21,10 @@ class CorpusVisualiser(pn.viewable.Viewer):
         'minutes': 'min', 'seconds': 's'
     }
     TIME_PERIOD_INVERSE_GROUPINGS: dict[str, str] = {v: k for k, v in TIME_PERIOD_GROUPINGS.items()}
-
-    CONTROLS_MAX_WIDTH: int = 120
+    CONTROLS_MAX_WIDTH: int = 200
+    PLOT_LINE_WIDTH: int = 2
+    PLOT_MARKER_SIZE: int = 6
+    MAX_DISPLAYABLE_VALUES: int = 1000
 
     def log(self, msg: str, level: int):
         logger = logging.getLogger(self.logger_name)
@@ -35,33 +36,51 @@ class CorpusVisualiser(pn.viewable.Viewer):
         self.logger_name: str = logger_name
 
         self.corpus_selector = Select(name="Selected corpus", width=self.CONTROLS_MAX_WIDTH)
-        self.time_col_selector = Select(name="Datetime column", width=self.CONTROLS_MAX_WIDTH)
+        self.time_col_selector = Select(name="Datetime column (x-axis)", width=self.CONTROLS_MAX_WIDTH)
         self.date_range_picker = DatetimeRangePicker(name="Datetime range", width=self.CONTROLS_MAX_WIDTH)
         self.date_group_periods = IntInput(name="Number of intervals", start=1, value=1, width=self.CONTROLS_MAX_WIDTH)
         self.date_group_unit_selector = Select(name="Intervals", options=self.TIME_PERIOD_GROUPINGS, width=self.CONTROLS_MAX_WIDTH)
-        self.included_meta_selector = Select(name="Included metadata", width=self.CONTROLS_MAX_WIDTH)
-        self.generate_plots_button = Button(name="Generate plot", button_style='solid', button_type='primary', width=self.CONTROLS_MAX_WIDTH)
+        self.use_timeline_metadata_checkbox = Checkbox(name="Separate by metadata", value=False)
+        self.timeline_meta_selector = Select(name="Timeline metadata (y-axis)", disabled=True, width=self.CONTROLS_MAX_WIDTH)
+        self.histogram_meta_selector = Select(name="Histogram metadata (x-axis)", width=self.CONTROLS_MAX_WIDTH)
+        self.histogram_stack_meta_selector = Select(name="Histogram stacking metadata (y-axis)", width=self.CONTROLS_MAX_WIDTH)
+
+        self.generate_plots_button = Button(name="Generate plots", button_style='solid', button_type='primary', width=self.CONTROLS_MAX_WIDTH)
         self.controls = pn.Column(
             self.corpus_selector,
             self.time_col_selector,
             self.date_range_picker,
+            Markdown("**Frequency timeline**"),
             self.date_group_periods,
             self.date_group_unit_selector,
-            self.included_meta_selector,
+            self.use_timeline_metadata_checkbox,
+            self.timeline_meta_selector,
+            Markdown("**Count histogram**"),
+            self.histogram_meta_selector,
+            self.histogram_stack_meta_selector,
             self.generate_plots_button,
             width=self.CONTROLS_MAX_WIDTH
         )
 
-        self.plots = pn.Column(min_width=1000, sizing_mode='stretch_width')
+        self.frequency_plot: Plotly = Plotly(sizing_mode='stretch_width', visible=False)
+        self.count_histogram: Plotly = Plotly(sizing_mode='stretch_width', visible=False)
+
+        self.plots = pn.Column(
+            self.frequency_plot,
+            self.count_histogram,
+            min_width=1200,
+            sizing_mode='stretch_width')
 
         self.panel = pn.Row(
             self.controls,
             self.plots,
+            min_width=1400,
             sizing_mode='stretch_width'
         )
 
         self.corpus_selector.param.watch(self._update_selected_corpus, ['value'])
         self.time_col_selector.param.watch(self._update_time_column, ['value'])
+        self.use_timeline_metadata_checkbox.param.watch(self._update_use_timeline_meta_checkbox, ['value'])
         self.generate_plots_button.on_click(self.generate_plots)
 
         self.corpus_loader.register_event_callback("build", self._update_corpus_list)
@@ -73,8 +92,19 @@ class CorpusVisualiser(pn.viewable.Viewer):
     def __panel__(self):
         return self.panel.servable()
 
+    def display_error(self, error_msg: str):
+        self.log(f"Error displayed: {error_msg}", logging.ERROR)
+        panel.state.notifications.error(error_msg, duration=0)
+
+    def display_warning(self, warning_msg: str):
+        self.log(f"Warning displayed: {warning_msg}", logging.ERROR)
+        panel.state.notifications.warning(warning_msg, duration=6000)
+
+    def display_success(self, success_msg: str):
+        self.log(f"Success displayed: {success_msg}", logging.INFO)
+        panel.state.notifications.success(success_msg, duration=3000)
+
     def _update_corpus_list(self, *_):
-        self.log("Updated corpus list", logging.DEBUG)
         try:
             corpus_options: dict[str, DataFrameCorpus] = self.corpus_loader.get_corpora()
             if self.corpus_selector.options != corpus_options:
@@ -85,40 +115,57 @@ class CorpusVisualiser(pn.viewable.Viewer):
             self.log(str(traceback.format_exc()), logging.DEBUG)
 
     def _update_selected_corpus(self, *_):
-        self.log("Updated selected corpus", logging.DEBUG)
         try:
             corpus: Optional[DataFrameCorpus] = self.corpus_selector.value
             if corpus is None:
                 self.time_col_selector.value = None
-                self.included_meta_selector.value = None
+                self.timeline_meta_selector.value = None
             else:
                 meta_list: list[str] = corpus.metas
-                selectable_list: list[str] = meta_list + [corpus._COL_DOC]
-                if self.included_meta_selector.options != selectable_list:
-                    self.included_meta_selector.options = selectable_list
-                    self.included_meta_selector.value = selectable_list[0]
                 datetime_metas: list[str] = [col for col in meta_list if is_datetime64_any_dtype(corpus.get_meta(col))]
                 if self.time_col_selector.options != datetime_metas:
                     self.time_col_selector.options = datetime_metas
                     if len(datetime_metas):
                         self.time_col_selector.value = datetime_metas[0]
+                selectable_list: list[str] = [None] + [col for col in meta_list if col not in datetime_metas] + [corpus._COL_DOC]
+                if self.timeline_meta_selector.options != selectable_list:
+                    self.timeline_meta_selector.options = selectable_list
+                    self.timeline_meta_selector.value = selectable_list[0]
+                use_timeline_meta: bool = self.use_timeline_metadata_checkbox.value
+                if not use_timeline_meta:
+                    self.timeline_meta_selector.value = None
+                if self.histogram_meta_selector.options != meta_list:
+                    self.histogram_meta_selector.options = meta_list
+                    if len(meta_list):
+                        self.histogram_meta_selector.value = meta_list[0]
+                stack_meta_list: list[str] = [None] + meta_list
+                if self.histogram_stack_meta_selector.options != stack_meta_list:
+                    self.histogram_stack_meta_selector.options = stack_meta_list
+                    if len(stack_meta_list):
+                        self.histogram_stack_meta_selector.value = None
         except Exception as e:
             self.log(str(traceback.format_exc()), logging.DEBUG)
 
     def _update_time_column(self, *_):
-        self.log("Updated time column", logging.DEBUG)
         try:
             corpus: Optional[DataFrameCorpus] = self.corpus_selector.value
             time_col: Optional[str] = self.time_col_selector.value
+            self.date_range_picker.value = None
             if (corpus is None) or (time_col is None) or (time_col not in corpus.metas):
-                self.date_range_picker.value = None
-            else:
-                date_series: Series = corpus.get_meta(time_col)
-                self.date_range_picker.start = date_series.min()
-                self.date_range_picker.end = date_series.max()
-                self.date_range_picker.value = (self.date_range_picker.start, self.date_range_picker.end)
+                return
+            date_series: Series = corpus.get_meta(time_col)
+            self.date_range_picker.start = date_series.min()
+            self.date_range_picker.end = date_series.max()
+            self.date_range_picker.value = (date_series.min(), date_series.max())
         except Exception as e:
             self.log(str(traceback.format_exc()), logging.DEBUG)
+
+    def _update_use_timeline_meta_checkbox(self, *_):
+        use_timeline_meta: bool = self.use_timeline_metadata_checkbox.value
+        self.log(f"Use timeline: {use_timeline_meta}", logging.DEBUG)
+        self.timeline_meta_selector.disabled = not use_timeline_meta
+        if not use_timeline_meta:
+            self.timeline_meta_selector.value = None
 
     def generate_plots(self, *_):
         try:
@@ -128,51 +175,86 @@ class CorpusVisualiser(pn.viewable.Viewer):
             corpus: DataFrameCorpus = self.corpus_selector.value
             plot_df: DataFrame = corpus.to_dataframe()
             time_col: str = self.time_col_selector.value
-            meta_col: str = self.included_meta_selector.value
+            timeline_meta_col: str = self.timeline_meta_selector.value
+            histogram_meta_col: str = self.histogram_meta_selector.value
+            histogram_stacked_meta_col: str = self.histogram_stack_meta_selector.value
 
             start_date, end_date = self.date_range_picker.value
             mask = (plot_df[time_col] >= start_date) & (plot_df[time_col] <= end_date)
             filtered_df = plot_df.loc[mask]
 
-            plots = [
-                self.create_raw_frequency_plot(filtered_df, time_col),
-                self.create_meta_frequency_plot(filtered_df, time_col, meta_col)
-            ]
+            try:
+                self.frequency_plot.object = self.create_meta_frequency_plot(filtered_df, time_col, timeline_meta_col)
+                self.frequency_plot.visible = True
+            except ValueError as e:
+                self.frequency_plot.object = None
+                self.frequency_plot.visible = False
+                self.display_warning(str(e))
 
-            self.plots.objects = plots
+            if histogram_meta_col is not None:
+                try:
+                    self.count_histogram.object = self.create_meta_count_histogram(filtered_df, histogram_meta_col, histogram_stacked_meta_col)
+                    self.count_histogram.visible = True
+                except ValueError as e:
+                    self.count_histogram.object = None
+                    self.count_histogram.visible = False
+                    self.display_warning(str(e))
+            else:
+                self.count_histogram.object = None
+                self.count_histogram.visible = False
         except Exception as e:
             self.log(str(traceback.format_exc()), logging.DEBUG)
 
-    def create_raw_frequency_plot(self, plot_df: DataFrame, time_col: str) -> Plotly:
-        self.log(f"create_raw_frequency_plot method: Plot_df: {plot_df.shape}, time_col: {time_col}", logging.DEBUG)
-
-        date_grouping_periods = self.date_group_periods.value
-        date_group_unit = self.date_group_unit_selector.value
-        frequency: str = str(date_grouping_periods) + date_group_unit
-        count_col_name: str = 'Document count'
-        grouped_df = plot_df.groupby([Grouper(key=time_col, freq=frequency)]).size().reset_index(name=count_col_name)
-
-        date_group_readable = CorpusVisualiser.TIME_PERIOD_INVERSE_GROUPINGS[date_group_unit]
-        fig = px.line(grouped_df, x=time_col, y=count_col_name,
-                      title=f"Document count by {date_group_readable} intervals")
-        fig.update_traces(mode="lines+markers", marker=dict(size=10), line=dict(width=4))
-
-        return Plotly(fig)
-
-    def create_meta_frequency_plot(self, plot_df: DataFrame, time_col: str, meta_col: str) -> Plotly:
+    def create_meta_frequency_plot(self, plot_df: DataFrame, time_col: str, meta_col: Optional[str]) -> Figure:
         """
         Creates a line plot of time by frequency within the specified meta column
         """
-        self.log(f"create_meta_frequency_plot method: Plot_df: {plot_df.shape}, time_col: {time_col}, meta_col: {meta_col}", logging.DEBUG)
+        self.log(f"create_meta_frequency_plot method: plot_df: {plot_df.shape}, time_col: {time_col}, meta_col: {meta_col}", logging.DEBUG)
 
         date_grouping_periods = self.date_group_periods.value
         date_group_unit = self.date_group_unit_selector.value
-        frequency: str = str(date_grouping_periods) + date_group_unit
-        count_col_name: str = f'{meta_col} frequency'
-        grouped_df = plot_df.groupby([Grouper(key=time_col, freq=frequency), meta_col]).size().reset_index(name=count_col_name)
+        frequency: str = f"{date_grouping_periods} {date_group_unit}"
+        date_group_readable = f"{date_grouping_periods} {CorpusVisualiser.TIME_PERIOD_INVERSE_GROUPINGS[date_group_unit]}"
 
-        date_group_readable = CorpusVisualiser.TIME_PERIOD_INVERSE_GROUPINGS[date_group_unit]
-        fig = px.line(grouped_df, x=time_col, y=count_col_name, color=meta_col, title=f"{meta_col} frequency breakdown by {date_group_readable} intervals")
-        fig.update_traces(mode="lines+markers", marker=dict(size=10), line=dict(width=4))
+        if meta_col is None:
+            count_col_name: str = f'document_frequency'
+            color = None
+            groups = [Grouper(key=time_col, freq=frequency)]
+            title = f"Document frequency timeline by {date_group_readable} intervals"
+        else:
+            num_unique_meta: int = len(plot_df[meta_col].unique())
+            if num_unique_meta > CorpusVisualiser.MAX_DISPLAYABLE_VALUES:
+                raise ValueError(f"Cannot display timeline because {meta_col} column contains too many distinct values")
 
-        return Plotly(fig)
+            count_col_name: str = f'{meta_col}_frequency'
+            color = meta_col
+            groups = [Grouper(key=time_col, freq=frequency), meta_col]
+            title = f"{meta_col} frequency timeline by {date_group_readable} intervals"
+
+        grouped_df = plot_df.groupby(groups).size().reset_index(name=count_col_name)
+        fig = px.line(grouped_df, x=time_col, y=count_col_name, color=color, title=title)
+        fig.update_traces(mode="lines+markers", marker=dict(size=CorpusVisualiser.PLOT_MARKER_SIZE), line=dict(width=CorpusVisualiser.PLOT_LINE_WIDTH))
+
+        return fig
+
+    def create_meta_count_histogram(self, plot_df: DataFrame, meta_col: str, stacked_meta_col: Optional[str]) -> Figure:
+        """
+        Creates a histogram of the count of selected metadata over the dataframe
+        """
+        self.log(f"create_meta_count_histogram method: plot_df: {plot_df.shape}, meta_col: {meta_col}, stacked_meta_col: {stacked_meta_col}", logging.DEBUG)
+
+        num_unique_meta: int = len(plot_df[meta_col].unique())
+        if num_unique_meta > CorpusVisualiser.MAX_DISPLAYABLE_VALUES:
+            raise ValueError(f"Cannot display histogram because {meta_col} column contains too many distinct values")
+
+        group_list = [meta_col]
+        colour_col = meta_col
+        if stacked_meta_col:
+            group_list.append(stacked_meta_col)
+            colour_col = stacked_meta_col
+        count_col_name: str = f'{meta_col}_count'
+        grouped_df = plot_df.groupby(group_list).size().reset_index(name=count_col_name)
+
+        fig = px.histogram(grouped_df, x=meta_col, y=count_col_name, color=colour_col, title=f"{meta_col} total count histogram")
+
+        return fig
