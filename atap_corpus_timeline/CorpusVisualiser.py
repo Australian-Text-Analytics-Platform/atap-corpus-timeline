@@ -43,7 +43,7 @@ class CorpusVisualiser(pn.viewable.Viewer):
         self.use_timeline_metadata_checkbox = Checkbox(name="Separate by metadata", value=False)
         self.timeline_meta_selector = Select(name="Timeline metadata (y-axis)", disabled=True, width=self.CONTROLS_MAX_WIDTH)
         self.histogram_meta_selector = Select(name="Histogram metadata (x-axis)", width=self.CONTROLS_MAX_WIDTH)
-        self.histogram_stack_meta_selector = Select(name="Histogram stacking metadata (y-axis)", width=self.CONTROLS_MAX_WIDTH)
+        self.histogram_stack_meta_selector = Select(name="Histogram stacking metadata", width=self.CONTROLS_MAX_WIDTH)
 
         self.generate_plots_button = Button(name="Generate plots", button_style='solid', button_type='primary', width=self.CONTROLS_MAX_WIDTH)
         self.controls = pn.Column(
