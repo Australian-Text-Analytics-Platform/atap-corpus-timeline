@@ -29,7 +29,7 @@ class CorpusTimeline(pn.viewable.Viewer):
 
         formatter = logging.Formatter(
             '%(asctime)s %(levelname)6s - %(name)s:%(lineno)4d %(funcName)20s() - %(message)s')
-        log_file_location = abspath(join(dirname(__file__), '..', 'log.txt'))
+        log_file_location = abspath(join(dirname(__file__), 'log.txt'))
         # Max size is ~10MB with 1 backup, so a max size of ~20MB for log files
         max_bytes: int = 10000000
         backup_count: int = 1
