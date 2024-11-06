@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "atap-corpus-timeline"
-version = "0.2.0"
+version = "0.2.1"
 description = "A tool for visualising features of a corpus over time"
 authors = ["Hamish Croser <hamish.croser@sydney.edu.au>"]
 readme = "README.md"
@@ -14,9 +14,9 @@ exclude = ["*/.ipynb_checkpoints/*", "*log.txt"]
 python = ">=3.10,<3.12"
 panel = "~=1.4"
 plotly = "~5.24.1"
-atap-corpus-loader = "~=1.7.6"
-atap-context-extractor = "~0.2.0"
-atap-corpus-slicer = "~0.3.5"
+atap-corpus-loader = "~=1.8.0"
+atap-context-extractor = "~0.2.3"
+atap-corpus-slicer = "~0.3.0"
 
 [tool.poetry.group.dev]
 optional = true

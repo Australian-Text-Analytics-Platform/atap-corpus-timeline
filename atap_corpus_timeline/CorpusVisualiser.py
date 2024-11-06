@@ -80,11 +80,7 @@ class CorpusVisualiser(pn.viewable.Viewer):
         self.time_col_selector.param.watch(self._update_time_column, ['value'])
         self.generate_plots_button.on_click(self.generate_plots)
 
-        self.corpus_loader.register_event_callback("build", self._update_corpus_list)
-        self.corpus_loader.register_event_callback("rename", self._update_corpus_list)
-        self.corpus_loader.register_event_callback("delete", self._update_corpus_list)
-
-        panel.state.add_periodic_callback(self._update_corpus_list)
+        self.corpus_loader.register_event_callback("update", self._update_corpus_list)
 
     def __panel__(self):
         return self.panel.servable()
@@ -106,8 +102,6 @@ class CorpusVisualiser(pn.viewable.Viewer):
             corpus_options: dict[str, DataFrameCorpus] = self.corpus_loader.get_corpora()
             if self.corpus_selector.options != corpus_options:
                 self.corpus_selector.options = corpus_options
-                if len(corpus_options):
-                    self.corpus_selector.value = list(corpus_options.values())[-1]
         except Exception as e:
             self.log(str(traceback.format_exc()), logging.DEBUG)
 
