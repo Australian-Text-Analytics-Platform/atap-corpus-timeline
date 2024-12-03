@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "atap-corpus-timeline"
-version = "0.2.1"
+version = "0.2.2"
 description = "A tool for visualising features of a corpus over time"
 authors = ["Hamish Croser <hamish.croser@sydney.edu.au>"]
 readme = "README.md"
