@@ -6,7 +6,7 @@ A tool for visualising features of a corpus over time
 
 Click the button below to access a demo deployed on Binderhub
 
-[![Binder](https://binderhub.atap-binder.cloud.edu.au/badge_logo.svg)](https://binderhub.atap-binder.cloud.edu.au/v2/gh/Australian-Text-Analytics-Platform/atap-corpus-timeline/main?labpath=corpus-timeline.ipynb)
+[![Binder](https://binderhub.rc.nectar.org.au/badge_logo.svg)](https://binderhub.rc.nectar.org.au/v2/gh/Australian-Text-Analytics-Platform/atap-corpus-timeline/main?labpath=corpus-timeline.ipynb)
 
 ## Documentation
 
